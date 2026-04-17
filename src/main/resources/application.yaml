@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: ai-demo
+  ai:
+    vectorstore:
+      chroma:
+        client:
+          host: http://localhost
+          port: 8000
+          collection-name: my_collection
+          initialize-schema: true
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      api-key: ${OPENAI_API_KEY:your-api-key-here}
+      chat:
+        options:
+          model: qwen-plus
+          temperature: 0.7
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+           model: deepseek-r1:7b
+           temperature: 0.7
+      embedding:
+        options:
+          model: nomic-embed-text
+      init:
+        pull-model-strategy: never
+        embedding:
+          additional-models:
+            -nomic-embed-text
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3307/training?serverTimezone=Asia/Shanghai&useSSL=false&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&tinyInt1isBit=false&allowPublicKeyRetrieval=true&allowMultiQueries=true&useServerPrepStmts=false
+    username: root
+    password: 1234
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+  jackson:
+    default-property-inclusion: non_null
+    polymorphic-type-handling:
+      enabled: true
+
+logging:
+  level:
+    org.springframework.ai: debug
+    com.xiaoxiong.aidemo: debug

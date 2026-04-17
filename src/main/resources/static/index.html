@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI智能对话助手</title>
+    <!-- 使用最新的有效CDN链接 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        // 配置Tailwind CSS暗黑模式
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {}
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* 暗黑模式滚动条 */
+        .dark ::-webkit-scrollbar-track {
+            background: #374151;
+        }
+
+        .dark ::-webkit-scrollbar-thumb {
+            background: #6b7280;
+        }
+
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+
+        /* 输入框自适应高度 */
+        textarea {
+            min-height: 44px;
+            max-height: 200px;
+            transition: height 0.2s;
+        }
+
+        /* 加载动画 */
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.5;
+            }
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .animate-pulse {
+            animation: pulse 1.5s infinite;
+        }
+
+        .delay-100 {
+            animation-delay: 0.1s;
+        }
+
+        .delay-200 {
+            animation-delay: 0.2s;
+        }
+
+        /* 打字机效果 */
+        .typing-cursor::after {
+            content: "|";
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            from, to {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0;
+            }
+        }
+
+        /* 消息淡入效果 */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 侧边栏动画 */
+        .sidebar-enter-active, .sidebar-leave-active {
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar-enter-from, .sidebar-leave-to {
+            transform: translateX(-100%);
+        }
+
+        /* 对话项悬停效果 */
+        .conversation-item:hover {
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        .conversation-item.active {
+            background-color: rgba(59, 130, 246, 0.2);
+            border-left: 3px solid #3b82f6;
+        }
+
+        /* 暗黑模式对话项 */
+        .dark .conversation-item:hover {
+            background-color: rgba(59, 130, 246, 0.2);
+        }
+
+        .dark .conversation-item.active {
+            background-color: rgba(59, 130, 246, 0.3);
+            border-left: 3px solid #60a5fa;
+        }
+
+        /* 平滑过渡效果 */
+        * {
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+<div id="app" class="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <!-- 侧边栏 -->
+    <div v-if="showSidebar" class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+        <!-- 侧边栏头部 -->
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white">对话历史</h2>
+                <button @click="showSidebar = false" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <i class="fas fa-times text-gray-500 dark:text-gray-400"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 模型选择 -->
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">选择模型</label>
+            <select v-model="selectedModel" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white">
+                <option value="chat">deepseek-r1</option>
+                <option value="chat2Q">qwen-plus</option>
+                <option value="chat2D">deepseek-r1-0528</option>
+                <option value="chat2F">qwen-plus-character</option>
+                <option value="service">service</option>
+            </select>
+        </div>
+
+        <!-- 新建对话按钮 -->
+        <div class="p-4">
+            <button @click="startNewConversation" 
+                    class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors">
+                <i class="fas fa-plus"></i>
+                <span>新建对话</span>
+            </button>
+        </div>
+
+        <!-- 对话列表 -->
+        <div class="flex-1 overflow-y-auto">
+            <div v-for="(conversation, index) in conversations" :key="conversation.id"
+                 @click="switchConversation(index)"
+                 :class="['conversation-item p-4 cursor-pointer border-b border-gray-100 dark:border-gray-700 transition-colors',
+                          currentConversationIndex === index ? 'active' : '']">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium text-gray-800 dark:text-white truncate">
+                            {{ conversation.title || '新对话' }}
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                            {{ conversation.messages.length > 0 ? conversation.messages[conversation.messages.length - 1].content.substring(0, 50) + '...' : '暂无消息' }}
+                        </div>
+                    </div>
+                    <button @click.stop="deleteConversation(index)" 
+                            class="ml-2 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fas fa-trash text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主聊天区域 -->
+    <div class="flex-1 flex flex-col">
+        <!-- 顶部导航栏 -->
+        <header class="bg-white dark:bg-gray-800 shadow-sm py-3 px-4 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center space-x-4">
+                <button @click="showSidebar = !showSidebar" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <i class="fas fa-bars text-gray-600 dark:text-gray-400"></i>
+                </button>
+                <div class="text-xl font-bold text-blue-600 dark:text-blue-400">AI智能对话助手</div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button @click="toggleDarkMode" 
+                        class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                    <i :class="darkMode ? 'fas fa-sun text-yellow-500' : 'fas fa-moon text-gray-600 dark:text-gray-400'"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- 聊天内容区域 -->
+        <main class="flex-1 overflow-y-auto p-4 space-y-6" ref="chatContainer">
+            <div v-for="(message, index) in currentMessages" :key="index" class="max-w-4xl mx-auto">
+                <div :class="['flex', message.role === 'user' ? 'justify-end' : 'justify-start']">
+                    <div :class="['flex items-start space-x-3', message.role === 'user' ? 'flex-row-reverse space-x-reverse' : '']">
+                        <div :class="['w-10 h-10 rounded-full flex items-center justify-center',
+                                    message.role === 'user' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400' : 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400']">
+                            <i :class="message.role === 'user' ? 'fas fa-user' : 'fas fa-robot'"></i>
+                        </div>
+                        <div :class="['p-4 rounded-lg max-w-2xl shadow-sm',
+                                    message.role === 'user'
+                                        ? 'bg-blue-500 text-white'
+                                        : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600']">
+                            <div v-if="message.role === 'assistant' && message.isLoading" class="flex space-x-2">
+                                <div class="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-400 animate-pulse"></div>
+                                <div class="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-400 animate-pulse delay-100"></div>
+                                <div class="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-400 animate-pulse delay-200"></div>
+                            </div>
+                            <div v-else class="whitespace-pre-wrap">
+                                <span v-for="(char, charIndex) in message.content" :key="charIndex"
+                                      :class="{'opacity-0': charIndex >= message.visibleChars, 'fade-in': charIndex < message.visibleChars}">
+                                    {{ char }}
+                                </span>
+                                <span v-if="message.isStreaming" class="typing-cursor"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 输入框区域 -->
+        <footer class="border-t border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+            <div class="max-w-4xl mx-auto relative">
+                <div class="flex items-end space-x-3">
+                    <textarea
+                        v-model="userInput"
+                        @keydown.enter.exact.prevent="sendMessage"
+                        @keydown.ctrl.enter.exact.prevent="sendMessage"
+                        @keydown.esc.exact="stopResponse"
+                        placeholder="输入您的问题... (Enter发送，Ctrl+Enter换行)"
+                        :class="['flex-1 border rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 resize-none transition-colors',
+                            'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white',
+                            'focus:ring-blue-500 focus:border-transparent placeholder-gray-500 dark:placeholder-gray-400']"
+                        rows="1"
+                        ref="textarea"
+                        @input="adjustTextareaHeight"
+                    ></textarea>
+                    <button
+                        @click="isLoading ? stopResponse() : sendMessage()"
+                        :disabled="!userInput.trim() && !isLoading"
+                        :class="['p-3 rounded-lg transition-colors',
+                                isLoading
+                                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                                    : 'bg-blue-500 hover:bg-blue-600 text-white',
+                                'disabled:opacity-50 disabled:cursor-not-allowed']"
+                    >
+                        <i :class="isLoading ? 'fas fa-stop' : 'fas fa-paper-plane'"></i>
+                        <span class="ml-2">{{ isLoading ? '暂停' : '发送' }}</span>
+                    </button>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, nextTick, onMounted, watch, computed } = Vue;
+
+    createApp({
+        setup() {
+            const messages = ref([]);
+            const userInput = ref('');
+            const isLoading = ref(false);
+            const chatContainer = ref(null);
+            const textarea = ref(null);
+            const darkMode = ref(false);
+            const showSidebar = ref(false);
+            const conversations = ref([]);
+            const currentConversationIndex = ref(0);
+            const selectedModel = ref('chat');
+
+            let chatIdCounter = 1;
+            let controller = null;
+            let typingInterval = null;
+
+            // 计算当前对话的消息
+            const currentMessages = computed(() => {
+                if (conversations.value.length === 0) return [];
+                return conversations.value[currentConversationIndex.value]?.messages || [];
+            });
+
+            // 生成有序的chatId
+            const generateChatId = () => {
+                return chatIdCounter++;
+            };
+
+            // 调整文本区域高度
+            const adjustTextareaHeight = () => {
+                const textareaEl = textarea.value;
+                textareaEl.style.height = 'auto';
+                textareaEl.style.height = `${Math.min(textareaEl.scrollHeight, 200)}px`;
+            };
+
+            // 滚动到底部
+            const scrollToBottom = () => {
+                nextTick(() => {
+                    if (chatContainer.value) {
+                        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+                    }
+                });
+            };
+
+            // 切换暗黑模式
+            const toggleDarkMode = () => {
+                darkMode.value = !darkMode.value;
+                localStorage.setItem('darkMode', darkMode.value.toString());
+                
+                if (darkMode.value) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                
+                console.log('暗黑模式切换:', darkMode.value ? '开启' : '关闭');
+            };
+
+            // 新建对话
+            const startNewConversation = () => {
+                const newConversation = {
+                    id: generateChatId().toString(),
+                    title: '新对话',
+                    messages: [{
+                        role: 'assistant',
+                        content: '你好！我是AI智能助手，请问有什么能帮到您？',
+                        isLoading: false,
+                        visibleChars: 0,
+                        isStreaming: false
+                    }],
+                    chatId: generateChatId().toString()
+                };
+
+                conversations.value.unshift(newConversation);
+                currentConversationIndex.value = 0;
+                
+                // 确保欢迎消息完全可见
+                newConversation.messages[0].visibleChars = newConversation.messages[0].content.length;
+                
+                scrollToBottom();
+                nextTick(() => {
+                    textarea.value.focus();
+                });
+            };
+
+            // 切换对话
+            const switchConversation = (index) => {
+                currentConversationIndex.value = index;
+                showSidebar.value = false;
+                scrollToBottom();
+                nextTick(() => {
+                    textarea.value.focus();
+                });
+            };
+
+            // 删除对话
+            const deleteConversation = (index) => {
+                if (conversations.value.length <= 1) {
+                    startNewConversation();
+                    return;
+                }
+                
+                conversations.value.splice(index, 1);
+                if (currentConversationIndex.value >= conversations.value.length) {
+                    currentConversationIndex.value = conversations.value.length - 1;
+                }
+            };
+
+            // 模拟逐字打印效果
+            const startTypingEffect = (messageIndex) => {
+                const currentConversation = conversations.value[currentConversationIndex.value];
+                const message = currentConversation.messages[messageIndex];
+                
+                if (!message || message.visibleChars >= message.content.length) {
+                    clearInterval(typingInterval);
+                    typingInterval = null;
+                    message.isStreaming = false;
+                    return;
+                }
+
+                message.visibleChars++;
+                scrollToBottom();
+            };
+
+            // 发送消息
+            const sendMessage = async () => {
+                if (!userInput.value.trim() || isLoading.value) return;
+
+                // 确保有当前对话
+                if (conversations.value.length === 0) {
+                    startNewConversation();
+                }
+
+                // 中止之前的请求
+                if (controller) {
+                    controller.abort();
+                }
+                controller = new AbortController();
+
+                const currentConversation = conversations.value[currentConversationIndex.value];
+                const userMessage = {
+                    role: 'user',
+                    content: userInput.value.trim(),
+                    isLoading: false,
+                    visibleChars: userInput.value.trim().length,
+                    isStreaming: false
+                };
+
+                currentConversation.messages.push(userMessage);
+
+                const assistantMessage = {
+                    role: 'assistant',
+                    content: '',
+                    isLoading: true,
+                    visibleChars: 0,
+                    isStreaming: true
+                };
+
+                currentConversation.messages.push(assistantMessage);
+
+                // 更新对话标题（使用第一条用户消息）
+                if (currentConversation.messages.length === 3) {
+                    currentConversation.title = userMessage.content.substring(0, 30) + (userMessage.content.length > 30 ? '...' : '');
+                }
+
+                userInput.value = '';
+                adjustTextareaHeight();
+                scrollToBottom();
+                isLoading.value = true;
+
+                try {
+                    const url = `/ai/${selectedModel.value}?chatId=${currentConversation.chatId}&prompt=${encodeURIComponent(userMessage.content)}`;
+                    let messageIndex = currentConversation.messages.length - 1;
+                    if(selectedModel.value === 'service') {
+                        // /ai/service返回非流式，需fetch获取
+                        const response = await fetch(url);
+                        if (!response.ok) throw new Error('服务端异常');
+                        const text = await response.text();
+                        currentConversation.messages[messageIndex].content = text;
+                        currentConversation.messages[messageIndex].isLoading = false;
+                        currentConversation.messages[messageIndex].visibleChars = text.length;
+                        isLoading.value = false; // AI回答完后自动回到发送键
+                    } else {
+                        // 其它模型流式EventSource
+                        const eventSource = new EventSource(url);
+
+                        // 先清除之前的打字效果
+                        if (typingInterval) {
+                            clearInterval(typingInterval);
+                            typingInterval = null;
+                        }
+
+                        eventSource.onmessage = function(event) {
+                            currentConversation.messages[messageIndex].content += event.data;
+                            currentConversation.messages[messageIndex].isLoading = false;
+
+                            // 启动打字效果
+                            if (!typingInterval) {
+                                typingInterval = setInterval(() => {
+                                    startTypingEffect(messageIndex);
+                                }, 20);
+                            }
+
+                            scrollToBottom();
+                        };
+
+                        eventSource.onerror = function() {
+                            eventSource.close();
+                            const lastMessage = currentConversation.messages[messageIndex];
+                            lastMessage.isLoading = false;
+                            lastMessage.isStreaming = false;
+
+                            // 确保所有字符都可见
+                            if (lastMessage.visibleChars < lastMessage.content.length) {
+                                lastMessage.visibleChars = lastMessage.content.length;
+                            }
+
+                            isLoading.value = false; // AI回答完后自动回到发送键
+                            controller = null;
+
+                            if (typingInterval) {
+                                clearInterval(typingInterval);
+                                typingInterval = null;
+                            }
+
+                            scrollToBottom();
+                        };
+                    }
+
+                } catch (error) {
+                    console.error('请求出错:', error);
+                    const lastMessage = currentConversation.messages[currentConversation.messages.length - 1];
+                    lastMessage.content = '抱歉，请求过程中出现错误: ' + error.message;
+                    lastMessage.visibleChars = lastMessage.content.length;
+                    lastMessage.isLoading = false;
+                    lastMessage.isStreaming = false;
+                    isLoading.value = false;
+                }
+            };
+
+            // 停止响应
+            const stopResponse = () => {
+                if (controller) {
+                    controller.abort();
+                    const currentConversation = conversations.value[currentConversationIndex.value];
+                    const lastMessage = currentConversation.messages[currentConversation.messages.length - 1];
+                    lastMessage.isLoading = false;
+                    lastMessage.isStreaming = false;
+
+                    if (lastMessage.visibleChars < lastMessage.content.length) {
+                        lastMessage.visibleChars = lastMessage.content.length;
+                    }
+
+                    isLoading.value = false;
+                    controller = null;
+
+                    if (typingInterval) {
+                        clearInterval(typingInterval);
+                        typingInterval = null;
+                    }
+                }
+            };
+
+            // 切换模型时清空当前对话窗口历史并分配新chatId
+            watch(selectedModel, () => {
+                if (conversations.value.length > 0) {
+                    const current = conversations.value[currentConversationIndex.value];
+                    current.messages = [{
+                        role: 'assistant',
+                        content: '你好！我是AI智能助手，请问有什么能帮到您？',
+                        isLoading: false,
+                        visibleChars: 0,
+                        isStreaming: false
+                    }];
+                    // 分配新chatId
+                    current.chatId = generateChatId().toString();
+                    // 确保欢迎消息完全可见
+                    current.messages[0].visibleChars = current.messages[0].content.length;
+                }
+            });
+
+            // 初始化
+            onMounted(() => {
+                // 检查暗黑模式偏好
+                const savedDarkMode = localStorage.getItem('darkMode');
+                const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                
+                darkMode.value = savedDarkMode === 'true' || (savedDarkMode === null && prefersDark);
+                
+                // 应用暗黑模式
+                if (darkMode.value) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                
+                console.log('初始化暗黑模式:', darkMode.value ? '开启' : '关闭');
+
+                // 创建第一个对话
+                startNewConversation();
+            });
+
+            // 监听消息变化自动滚动
+            watch(currentMessages, scrollToBottom, {deep: true});
+
+            return {
+                messages,
+                currentMessages,
+                userInput,
+                isLoading,
+                darkMode,
+                showSidebar,
+                conversations,
+                currentConversationIndex,
+                selectedModel,
+                chatContainer,
+                textarea,
+                sendMessage,
+                stopResponse,
+                toggleDarkMode,
+                adjustTextareaHeight,
+                startNewConversation,
+                switchConversation,
+                deleteConversation
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
