@@ -1,0 +1,20 @@
+{
+  "appName": "智能文档处理系统",
+  "loading": "加载中...",
+  "error": "错误",
+  "success": "成功",
+  "confirm": "确认",
+  "cancel": "取消",
+  "save": "保存",
+  "delete": "删除",
+  "edit": "编辑",
+  "add": "添加",
+  "search": "搜索",
+  "home": "首页",
+  "login": "登录",
+  "register": "注册",
+  "logout": "退出登录",
+  "documents": "文档",
+  "chat": "聊天",
+  "settings": "设置"
+}

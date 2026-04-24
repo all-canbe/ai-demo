@@ -1,0 +1,27 @@
+# API Keys and Secrets
+.env
+openspec/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# LangGraph runtime data
+.langgraph_api/
+
+# Virtual environment
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+{
+  "title": "Document Management",
+  "upload": {
+    "title": "Upload Document",
+    "dropzone": "Drag and drop files here or click to upload",
+    "supportedFormats": "Supported formats: PDF, Word, Image, TXT, MD, HTML",
+    "uploading": "Uploading...",
+    "processing": "Processing...",
+    "success": "Upload successful",
+    "error": "Upload failed"
+  },
+  "list": {
+    "empty": "No documents yet",
+    "deleteConfirm": "Are you sure you want to delete this document?"
+  }
+}

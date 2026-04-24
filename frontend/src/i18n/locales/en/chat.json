@@ -1,0 +1,8 @@
+{
+  "title": "Smart Chat",
+  "inputPlaceholder": "Type your question...",
+  "send": "Send",
+  "typing": "Thinking...",
+  "noSession": "Select or create a session to start chatting",
+  "references": "References"
+}

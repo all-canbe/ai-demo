@@ -1,0 +1,16 @@
+{
+  "title": "文档管理",
+  "upload": {
+    "title": "上传文档",
+    "dropzone": "拖拽文件到此处或点击上传",
+    "supportedFormats": "支持的格式：PDF、Word、图片、TXT、MD、HTML",
+    "uploading": "上传中...",
+    "processing": "处理中...",
+    "success": "上传成功",
+    "error": "上传失败"
+  },
+  "list": {
+    "empty": "暂无文档",
+    "deleteConfirm": "确定要删除这个文档吗？"
+  }
+}

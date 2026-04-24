@@ -1,0 +1,8 @@
+{
+  "title": "智能聊天",
+  "inputPlaceholder": "输入您的问题...",
+  "send": "发送",
+  "typing": "正在思考...",
+  "noSession": "选择或创建一个会话开始聊天",
+  "references": "引用来源"
+}
