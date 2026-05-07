@@ -1,11 +1,30 @@
 import math
 from fastapi import APIRouter, Query
+from fastapi.responses import StreamingResponse
 from app.api.deps import DBSession, CurrentUser
 from app.schemas.common import ApiResponse, PaginatedData
 from app.schemas.chat import ChatRequest, ChatResponse, ChatSessionItem, ChatHistoryData
 from app.services import chat_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+@router.post("/stream")
+async def send_chat_message_stream(
+    db: DBSession,
+    current_user: CurrentUser,
+    data: ChatRequest,
+):
+    async def generate():
+        async for chunk in chat_service.stream_chat_message(
+            user=current_user,
+            message=data.message,
+            document_ids=data.document_ids,
+            chat_id=data.chat_id,
+        ):
+            yield chunk
+    
+    return StreamingResponse(generate(), media_type="text/plain")
 
 
 @router.post("")

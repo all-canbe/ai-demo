@@ -6,25 +6,25 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class SimpleEnsembleRetriever:
-    """简单的集成检索器实现"""
-    def __init__(self, retrievers: List, weights: List[float]):
-        self.retrievers = retrievers
-        self.weights = weights
-
-    def get_relevant_documents(self, query: str) -> List[Document]:
-        results = {}
+try:
+    from langchain.retrievers import EnsembleRetriever
+except ImportError:
+    class EnsembleRetriever:
+        def __init__(self, retrievers, weights):
+            self.retrievers = retrievers
+            self.weights = weights
         
-        for retriever, weight in zip(self.retrievers, self.weights):
-            docs = retriever.get_relevant_documents(query)
-            for doc in docs:
-                doc_id = id(doc) if hasattr(doc, 'page_content') else str(doc)
-                if doc_id not in results:
-                    results[doc_id] = {'doc': doc, 'score': 0}
-                results[doc_id]['score'] += weight
-
-        sorted_results = sorted(results.values(), key=lambda x: x['score'], reverse=True)
-        return [r['doc'] for r in sorted_results]
+        def get_relevant_documents(self, query: str) -> List[Document]:
+            results = {}
+            for retriever, weight in zip(self.retrievers, self.weights):
+                docs = retriever.get_relevant_documents(query)
+                for doc in docs:
+                    doc_id = id(doc)
+                    if doc_id not in results:
+                        results[doc_id] = {'doc': doc, 'score': 0}
+                    results[doc_id]['score'] += weight
+            sorted_results = sorted(results.values(), key=lambda x: x['score'], reverse=True)
+            return [r['doc'] for r in sorted_results]
 
 class HybridRetriever:
     def __init__(self, vector_retriever=None, graph_retriever=None):
@@ -63,7 +63,7 @@ class HybridRetriever:
         if weights is None:
             weights = [1.0 / len(retrievers)] * len(retrievers)
 
-        self.ensemble_retriever = SimpleEnsembleRetriever(
+        self.ensemble_retriever = EnsembleRetriever(
             retrievers=retrievers,
             weights=weights
         )
