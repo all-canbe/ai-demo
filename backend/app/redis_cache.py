@@ -1,7 +1,7 @@
 import json
 from typing import Any, Optional
 import redis
-from app.config import settings
+from app.config.settings import settings
 
 class RedisCache:
     def __init__(self):

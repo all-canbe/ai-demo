@@ -1,8 +1,7 @@
 from langchain_openai import ChatOpenAI
-from langchain.chains import RetrievalQA, ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import PromptTemplate
-from langchain.schema import Document
+from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.documents import Document
 from typing import List, Dict, Any, Optional, Iterator
 import logging
 
@@ -17,17 +16,49 @@ class QAEngine:
             streaming=True,
             temperature=0.7
         )
-        self.retrieval_qa = None
-        self.conversational_qa = None
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
+        self.chat_history = []
+        self.retriever = None
 
     def init_retrieval_qa(self, retriever, prompt_template: str = None):
-        """初始化检索问答链"""
-        if prompt_template is None:
-            prompt_template = """使用以下上下文来回答用户的问题。如果你不知道答案，就说你不知道，不要编造答案。
+        """初始化检索问答"""
+        self.retriever = retriever
+        logger.info("检索问答已初始化")
+
+    def init_conversational_qa(self, retriever):
+        """初始化对话式问答"""
+        self.retriever = retriever
+        logger.info("对话式问答已初始化")
+
+    def generate_answer(self, question: str, context: str = "") -> str:
+        """生成回答"""
+        if context:
+            prompt = f"""使用以下上下文来回答用户的问题。如果你不知道答案，就说你不知道，不要编造答案。
+
+上下文: {context}
+
+问题: {question}
+
+答案:"""
+        else:
+            prompt = f"""回答以下问题：
+
+问题: {question}
+
+答案:"""
+
+        messages = [HumanMessage(content=prompt)]
+        response = self.llm.invoke(messages)
+        return response.content.strip()
+
+    def answer(self, question: str) -> Dict[str, Any]:
+        """非流式问答"""
+        if not self.retriever:
+            raise ValueError("检索器未初始化")
+
+        docs = self.retriever.get_relevant_documents(question)
+        context = "\n\n".join([doc.page_content for doc in docs])
+        
+        prompt = f"""使用以下上下文来回答用户的问题。如果你不知道答案，就说你不知道，不要编造答案。
 
 上下文: {context}
 
@@ -35,110 +66,85 @@ class QAEngine:
 
 答案:"""
 
-        prompt = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
-        )
-
-        self.retrieval_qa = RetrievalQA.from_chain_type(
-            llm=self.llm,
-            chain_type="stuff",
-            retriever=retriever,
-            chain_type_kwargs={"prompt": prompt},
-            return_source_documents=True
-        )
-        logger.info("检索问答链已初始化")
-
-    def init_conversational_qa(self, retriever):
-        """初始化对话式问答链"""
-        self.conversational_qa = ConversationalRetrievalChain.from_llm(
-            llm=self.llm,
-            retriever=retriever,
-            memory=self.memory,
-            return_source_documents=True
-        )
-        logger.info("对话式问答链已初始化")
-
-    def answer(self, question: str) -> Dict[str, Any]:
-        """非流式问答"""
-        if not self.retrieval_qa:
-            raise ValueError("检索问答链未初始化")
-
-        result = self.retrieval_qa({"query": question})
+        messages = [HumanMessage(content=prompt)]
+        response = self.llm.invoke(messages)
+        
         logger.info(f"问答完成，问题: {question[:50]}...")
         
         return {
-            "answer": result["result"],
+            "answer": response.content.strip(),
             "sources": [
                 {"content": doc.page_content, "metadata": doc.metadata}
-                for doc in result.get("source_documents", [])
+                for doc in docs
             ]
         }
 
     def answer_stream(self, question: str) -> Iterator[str]:
         """流式问答"""
-        if not self.retrieval_qa:
-            raise ValueError("检索问答链未初始化")
+        if not self.retriever:
+            raise ValueError("检索器未初始化")
 
         logger.info(f"开始流式问答，问题: {question[:50]}...")
         
-        for chunk in self._streaming_answer(question):
-            yield chunk
-
-    def _streaming_answer(self, question: str) -> Iterator[str]:
-        """内部流式回答方法"""
-        from langchain.callbacks import StreamingStdOutCallbackHandler
-        from langchain.chains import LLMChain
+        docs = self.retriever.get_relevant_documents(question)
+        context = "\n\n".join([doc.page_content for doc in docs])
         
-        prompt = PromptTemplate(
-            template="""使用以下上下文来回答用户的问题：
+        prompt = f"""使用以下上下文来回答用户的问题：
 
 上下文: {context}
 
 问题: {question}
 
-答案:""",
-            input_variables=["context", "question"]
-        )
+答案:"""
 
-        docs = self.retrieval_qa.retriever.get_relevant_documents(question)
-        context = "\n\n".join([doc.page_content for doc in docs])
-
-        chain = LLMChain(
-            llm=self.llm,
-            prompt=prompt,
-            callbacks=[StreamingStdOutCallbackHandler()]
-        )
-
-        for chunk in chain.stream({"context": context, "question": question}):
-            if "text" in chunk:
-                yield chunk["text"]
+        messages = [HumanMessage(content=prompt)]
+        
+        for chunk in self.llm.stream(messages):
+            if hasattr(chunk, 'content'):
+                yield chunk.content
 
     def conversational_answer(self, question: str) -> Dict[str, Any]:
         """对话式问答"""
-        if not self.conversational_qa:
-            raise ValueError("对话式问答链未初始化")
+        if not self.retriever:
+            raise ValueError("检索器未初始化")
 
-        result = self.conversational_qa({"question": question})
+        docs = self.retriever.get_relevant_documents(question)
+        context = "\n\n".join([doc.page_content for doc in docs])
+        
+        messages = []
+        for msg in self.chat_history:
+            messages.append(msg)
+        
+        messages.append(HumanMessage(content=f"""使用以下上下文来回答问题：
+
+上下文: {context}
+
+问题: {question}
+"""))
+
+        response = self.llm.invoke(messages)
+        self.chat_history.append(HumanMessage(content=question))
+        self.chat_history.append(AIMessage(content=response.content))
+        
         logger.info(f"对话式问答完成")
         
         return {
-            "answer": result["answer"],
+            "answer": response.content.strip(),
             "sources": [
                 {"content": doc.page_content, "metadata": doc.metadata}
-                for doc in result.get("source_documents", [])
+                for doc in docs
             ],
-            "chat_history": [str(msg) for msg in self.memory.chat_memory.messages]
+            "chat_history": [str(msg.content) for msg in self.chat_history]
         }
 
     def clear_history(self):
         """清除对话历史"""
-        self.memory.clear()
+        self.chat_history = []
         logger.info("对话历史已清除")
 
     def get_chat_history(self) -> List[str]:
         """获取对话历史"""
-        return [str(msg) for msg in self.memory.chat_memory.messages]
+        return [str(msg.content) for msg in self.chat_history]
 
     def batch_answer(self, questions: List[str]) -> List[Dict[str, Any]]:
         """批量问答"""
@@ -164,5 +170,5 @@ class QAEngine:
 
 总结:"""
 
-        result = self.llm.predict(prompt)
-        return result.strip()
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        return response.content.strip()

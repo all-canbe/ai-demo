@@ -37,9 +37,69 @@ services:
     networks:
       - docanalyzer-network
 
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: docanalyzer-neo4j
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4jpassword}
+      NEO4J_dbms_memory_pagecache_size: 512M
+      NEO4J_dbms_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - docanalyzer-network
+
+  milvus:
+    image: milvusdb/milvus:v2.4.12
+    container_name: docanalyzer-milvus
+    environment:
+      MILVUS_ETCD_ENDPOINTS: etcd:2379
+      MILVUS_PULSAR_ADDRESS: pulsar://pulsar:6650
+      MILVUS_STORAGE_TYPE: local
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      - etcd
+      - pulsar
+    networks:
+      - docanalyzer-network
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: docanalyzer-etcd
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+    volumes:
+      - etcd_data:/etcd
+    networks:
+      - docanalyzer-network
+
+  pulsar:
+    image: apache/pulsar:2.11.1
+    container_name: docanalyzer-pulsar
+    command: bin/pulsar standalone
+    volumes:
+      - pulsar_data:/pulsar/data
+    networks:
+      - docanalyzer-network
+
   fastapi:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: docanalyzer-fastapi
     environment:
@@ -48,11 +108,21 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-appuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apppassword}
       POSTGRES_DB: ${POSTGRES_DB:-docanalyzer}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4jpassword}
+      MILVUS_HOST: milvus
+      MILVUS_PORT: 19530
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: 0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-docai-secret-key}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      UPLOAD_DIR: /app/storage/uploads
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "8000:8000"
     depends_on:
@@ -60,15 +130,20 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      milvus:
+        condition: service_started
     volumes:
-      - ./backend:/app
+      - ./:/app
+      - uploads_data:/app/storage/uploads
     networks:
       - docanalyzer-network
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   celery-worker:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: docanalyzer-celery-worker
     environment:
@@ -89,14 +164,14 @@ services:
       fastapi:
         condition: service_started
     volumes:
-      - ./backend:/app
+      - ./:/app
     networks:
       - docanalyzer-network
     command: celery -A app.celery worker --loglevel=info --concurrency=4
 
   celery-beat:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: docanalyzer-celery-beat
     environment:
@@ -117,7 +192,7 @@ services:
       fastapi:
         condition: service_started
     volumes:
-      - ./backend:/app
+      - ./:/app
     networks:
       - docanalyzer-network
     command: celery -A app.celery beat --loglevel=info
@@ -126,6 +201,16 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  neo4j_data:
+    driver: local
+  milvus_data:
+    driver: local
+  etcd_data:
+    driver: local
+  pulsar_data:
+    driver: local
+  uploads_data:
     driver: local
 
 networks:

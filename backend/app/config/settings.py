@@ -4,9 +4,11 @@ from typing import Optional
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "DocAI"
+    APP_NAME: str = "DocAI"
     VERSION: str = "1.0.0"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
+    API_PREFIX: str = "/api"
 
     DATABASE_URL: str = "postgresql+asyncpg://user:pass@localhost:5432/docai"
     DATABASE_POOL_SIZE: int = 20
@@ -20,6 +22,11 @@ class Settings(BaseSettings):
     MILVUS_PORT: int = 19530
 
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: Optional[str] = None
+    REDIS_DB: int = 0
+    REDIS_CACHE_TTL: int = 3600
 
     JWT_SECRET_KEY: str = "change-this-to-a-secure-secret-key-at-least-32-chars"
     JWT_ALGORITHM: str = "HS256"
@@ -37,6 +44,8 @@ class Settings(BaseSettings):
     ALLOWED_FILE_TYPES: list[str] = [
         "pdf", "docx", "doc", "png", "jpg", "jpeg", "txt", "md", "html"
     ]
+    TESSERACT_PATH: str = "/usr/bin/tesseract"
+    MILVUS_COLLECTION: str = "document_chunks"
 
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"

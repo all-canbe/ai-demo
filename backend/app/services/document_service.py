@@ -2,13 +2,13 @@ from typing import List, Dict, Any
 import uuid
 import logging
 
-from core.document.parser import DocumentParser
-from core.vector.milvus_store import MilvusVectorStore
-from core.graph.neo4j_graph import Neo4jGraphBuilder
-from core.retrieval.hybrid_retriever import HybridRetriever
-from core.llm.qa_engine import QAEngine
-from core.llm.summarizer import DocumentSummarizer
-from config.settings import settings
+from app.processing.document.parser import DocumentParser
+from app.processing.vector.milvus_store import MilvusVectorStore
+from app.processing.graph.neo4j_graph import Neo4jGraphBuilder
+from app.processing.retrieval.hybrid_retriever import HybridRetriever
+from app.processing.llm.qa_engine import QAEngine
+from app.processing.llm.summarizer import DocumentSummarizer
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class DocumentService:
         )
         self.graph_builder = Neo4jGraphBuilder(
             uri=settings.NEO4J_URI,
-            username=settings.NEO4J_USERNAME,
+            username=settings.NEO4J_USER,
             password=settings.NEO4J_PASSWORD
         )
         self.qa_engine = QAEngine(

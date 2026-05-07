@@ -1,7 +1,7 @@
 from langchain_openai import ChatOpenAI
-from langchain.chains.summarize import load_summarize_chain
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage
 from typing import List, Dict, Any, Optional, Iterator
 import logging
 
@@ -27,15 +27,18 @@ class DocumentSummarizer:
         if not text.strip():
             return "文档内容为空"
 
-        docs = self._split_text(text)
-        logger.info(f"开始生成摘要，文本长度: {len(text)}, 分割为 {len(docs)} 个chunk")
+        chunks = self.text_splitter.split_text(text)
+        logger.info(f"开始生成摘要，文本长度: {len(text)}, 分割为 {len(chunks)} 个chunk")
 
-        if mode == "map_reduce":
-            summary = self._map_reduce_summarize(docs)
-        elif mode == "refine":
-            summary = self._refine_summarize(docs)
+        if len(chunks) == 1:
+            summary = self._summarize_single(chunks[0])
         else:
-            summary = self._default_summarize(docs)
+            if mode == "map_reduce":
+                summary = self._map_reduce_summarize(chunks)
+            elif mode == "refine":
+                summary = self._refine_summarize(chunks)
+            else:
+                summary = self._default_summarize(chunks)
 
         logger.info(f"摘要生成完成，长度: {len(summary)}")
         return summary
@@ -46,46 +49,77 @@ class DocumentSummarizer:
             yield "文档内容为空"
             return
 
-        docs = self._split_text(text)
+        chunks = self.text_splitter.split_text(text)
         
-        if len(docs) == 1:
-            for chunk in self._stream_single_summary(docs[0].page_content):
+        if len(chunks) == 1:
+            for chunk in self._stream_single_summary(chunks[0]):
                 yield chunk
         else:
-            for chunk in self._stream_multi_summary(docs):
+            for chunk in self._stream_multi_summary(chunks):
                 yield chunk
 
-    def _split_text(self, text: str) -> List[Document]:
-        """将文本分割为Document块"""
-        chunks = self.text_splitter.split_text(text)
-        return [Document(page_content=chunk) for chunk in chunks]
+    def _summarize_single(self, text: str) -> str:
+        """总结单块文本"""
+        prompt = f"""请对以下文本进行简明扼要的总结：
 
-    def _default_summarize(self, docs: List[Document]) -> str:
-        """默认摘要方法（stuff）"""
-        chain = load_summarize_chain(
-            llm=self.llm,
-            chain_type="stuff",
-            verbose=False
-        )
-        return chain.run(docs)
+{text}
 
-    def _map_reduce_summarize(self, docs: List[Document]) -> str:
+总结："""
+
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        return response.content.strip()
+
+    def _default_summarize(self, chunks: List[str]) -> str:
+        """默认摘要方法"""
+        combined = "\n\n".join(chunks[:3])
+        if len(chunks) > 3:
+            combined = combined + "\n\n（...更多内容省略）"
+        
+        prompt = f"""请对以下文本进行简明扼要的总结：
+
+{combined}
+
+总结："""
+
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        return response.content.strip()
+
+    def _map_reduce_summarize(self, chunks: List[str]) -> str:
         """Map-Reduce摘要方法"""
-        chain = load_summarize_chain(
-            llm=self.llm,
-            chain_type="map_reduce",
-            verbose=False
-        )
-        return chain.run(docs)
+        chunk_summaries = []
+        for chunk in chunks:
+            summary = self._summarize_single(chunk)
+            chunk_summaries.append(summary)
+        
+        combined = "\n\n".join(chunk_summaries)
+        final_prompt = f"""请将以下多个摘要整合成一个连贯的最终摘要：
 
-    def _refine_summarize(self, docs: List[Document]) -> str:
+{combined}
+
+最终总结："""
+
+        response = self.llm.invoke([HumanMessage(content=final_prompt)])
+        return response.content.strip()
+
+    def _refine_summarize(self, chunks: List[str]) -> str:
         """Refine摘要方法"""
-        chain = load_summarize_chain(
-            llm=self.llm,
-            chain_type="refine",
-            verbose=False
-        )
-        return chain.run(docs)
+        summary = self._summarize_single(chunks[0])
+        
+        for i in range(1, len(chunks)):
+            refine_prompt = f"""基于以下已有的总结：
+
+{summary}
+
+请结合新增的内容进行补充和改进：
+
+{chunks[i]}
+
+改进后的总结："""
+            
+            response = self.llm.invoke([HumanMessage(content=refine_prompt)])
+            summary = response.content.strip()
+        
+        return summary
 
     def _stream_single_summary(self, text: str) -> Iterator[str]:
         """流式生成单文档摘要"""
@@ -95,17 +129,17 @@ class DocumentSummarizer:
 
 总结："""
 
-        for chunk in self.llm.stream(prompt):
+        for chunk in self.llm.stream([HumanMessage(content=prompt)]):
             if hasattr(chunk, 'content'):
                 yield chunk.content
 
-    def _stream_multi_summary(self, docs: List[Document]) -> Iterator[str]:
+    def _stream_multi_summary(self, chunks: List[str]) -> Iterator[str]:
         """流式生成多文档摘要"""
         chunk_summaries = []
         
-        for i, doc in enumerate(docs):
-            yield f"正在处理第 {i+1}/{len(docs)} 部分...\n"
-            summary = self._default_summarize([doc])
+        for i, chunk in enumerate(chunks):
+            yield f"正在处理第 {i+1}/{len(chunks)} 部分...\n"
+            summary = self._summarize_single(chunk)
             chunk_summaries.append(summary)
             yield f"第 {i+1} 部分摘要完成\n"
 
@@ -118,7 +152,7 @@ class DocumentSummarizer:
 
 最终总结："""
 
-        for chunk in self.llm.stream(final_prompt):
+        for chunk in self.llm.stream([HumanMessage(content=final_prompt)]):
             if hasattr(chunk, 'content'):
                 yield chunk.content
 
@@ -130,8 +164,8 @@ class DocumentSummarizer:
 
 关键点："""
 
-        result = self.llm.predict(prompt)
-        points = [p.strip() for p in result.split("\n") if p.strip()]
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        points = [p.strip() for p in response.content.split("\n") if p.strip()]
         return points[:max_points]
 
     def generate_questions(self, text: str, max_questions: int = 5) -> List[str]:
@@ -142,8 +176,8 @@ class DocumentSummarizer:
 
 问题："""
 
-        result = self.llm.predict(prompt)
-        questions = [q.strip() for q in result.split("\n") if q.strip()]
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        questions = [q.strip() for q in response.content.split("\n") if q.strip()]
         return questions[:max_questions]
 
     def summarize_documents(self, documents: List[Dict[str, Any]]) -> Dict[str, str]:
@@ -172,7 +206,8 @@ class DocumentSummarizer:
 
 执行摘要："""
 
-        return self.llm.predict(prompt)
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        return response.content.strip()
 
     def create_bullet_summary(self, text: str) -> str:
         """生成要点式摘要"""
@@ -182,4 +217,5 @@ class DocumentSummarizer:
 
 要点摘要："""
 
-        return self.llm.predict(prompt)
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        return response.content.strip()

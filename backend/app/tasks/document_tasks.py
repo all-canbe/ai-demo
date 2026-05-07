@@ -111,3 +111,36 @@ def _update_status(document_id: str, status: str, error_message: str | None = No
 
     _run_async(_do())
     logger.info(f"文档状态更新: {document_id} -> {status}")
+
+
+@celery_app.task(
+    name="app.tasks.document_tasks.health_check",
+    bind=True,
+)
+def health_check(self):
+    logger.info("健康检查任务执行")
+    return {"status": "healthy", "service": "celery"}
+
+
+@celery_app.task(
+    name="app.tasks.document_tasks.generate_faq_answer",
+    bind=True,
+    max_retries=2,
+    soft_time_limit=60,
+)
+def generate_faq_answer(self, question: str, context: str):
+    from app.processing.llm.qa_engine import QAEngine
+    
+    try:
+        qa_engine = QAEngine()
+        answer = qa_engine.generate_answer(question, context)
+        
+        from app.redis_cache import redis_cache
+        redis_cache.set_faq_answer(question, answer)
+        
+        logger.info(f"FAQ回答生成完成: {question[:50]}...")
+        return answer
+    
+    except Exception as exc:
+        logger.error(f"FAQ回答生成失败: {exc}")
+        raise self.retry(exc=exc)
