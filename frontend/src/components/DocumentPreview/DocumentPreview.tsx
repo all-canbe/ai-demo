@@ -1,163 +1,211 @@
-import { useState, useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { X, ChevronRight, FileText, Search, Highlighter } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Document, Page, pdfjs } from 'react-pdf';
+import { X, ZoomIn, ZoomOut, RotateCw, FileText, Search, ChevronRight, Download, Printer } from 'lucide-react';
+import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/esm/Page/TextLayer.css';
 
-export interface DocumentSection {
-  id: string;
-  title: string;
-  level: number;
-}
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 interface DocumentPreviewProps {
-  title: string;
-  content: string;
+  fileUrl: string;
+  fileName: string;
   onClose?: () => void;
-  highlightQuery?: string;
 }
 
-export function DocumentPreview({ title, content, onClose, highlightQuery }: DocumentPreviewProps) {
-  const [activeSection, setActiveSection] = useState<string | null>(null);
+export function DocumentPreview({ fileUrl, fileName, onClose }: DocumentPreviewProps) {
+  const [numPages, setNumPages] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1);
+  const [rotation, setRotation] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedText, setHighlightedText] = useState<string | null>(null);
 
-  const sections = useMemo((): DocumentSection[] => {
-    const regex = /^(#{1,3})\s+(.+)$/gm;
-    const matches: DocumentSection[] = [];
-    let match;
-    
-    while ((match = regex.exec(content)) !== null) {
-      const level = match[1].length;
-      const sectionTitle = match[2].trim();
-      const id = sectionTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      
-      matches.push({ id, title: sectionTitle, level });
-    }
-    
-    return matches;
-  }, [content]);
+  const onDocumentLoadSuccess = useCallback(({ numPages: totalPages }: { numPages: number }) => {
+    setNumPages(totalPages);
+  }, []);
 
-  const scrollToSection = (id: string) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setActiveSection(id);
+  const handleZoomIn = () => setScale((prev) => Math.min(prev + 0.25, 3));
+  const handleZoomOut = () => setScale((prev) => Math.max(prev - 0.25, 0.5));
+  const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+
+  const goToPrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
     }
   };
 
-  const highlightContent = useMemo(() => {
-    if (!highlightQuery) return content;
-    
-    const escaped = highlightQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escaped})`, 'gi');
-    return content.replace(regex, '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>');
-  }, [content, highlightQuery]);
+  const goToNextPage = () => {
+    if (currentPage < numPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
 
-  const handleContentClick = () => {
-    setSearchQuery('');
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      setHighlightedText(searchQuery);
+    } else {
+      setHighlightedText(null);
+    }
+  };
+
+  const handleDownload = () => {
+    const link = document.createElement('a');
+    link.href = fileUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-xl shadow-lg overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center gap-3">
-          <FileText className="w-5 h-5 text-primary-500" />
-          <h2 className="font-semibold text-gray-800 truncate flex-1">{title}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="w-[90vw] max-w-6xl h-[85vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-primary-500" />
+            <h2 className="font-semibold text-gray-800 truncate flex-1 max-w-md">{fileName}</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownload}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+              title="下载文档"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+              title="打印文档"
+            >
+              <Printer className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+              aria-label="Close preview"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
-          aria-label="Close preview"
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="w-64 border-r border-gray-200 bg-gray-50 p-3 overflow-y-auto scrollbar-thin flex-shrink-0">
-          <div className="mb-4">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 bg-white">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goToPrevPage}
+              disabled={currentPage <= 1}
+              className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              上一页
+            </button>
+            <span className="px-3 py-1.5 text-sm text-gray-600">
+              {currentPage} / {numPages}
+            </span>
+            <button
+              onClick={goToNextPage}
+              disabled={currentPage >= numPages}
+              className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              下一页
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleZoomOut}
+              disabled={scale <= 0.5}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="缩小"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <span className="px-3 py-1 text-sm text-gray-500 min-w-[60px] text-center">
+              {Math.round(scale * 100)}%
+            </span>
+            <button
+              onClick={handleZoomIn}
+              disabled={scale >= 3}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="放大"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleRotate}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="旋转90°"
+            >
+              <RotateCw className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索文档..."
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="搜索文本..."
+                className="w-48 pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
               />
             </div>
+            <button
+              onClick={handleSearch}
+              className="px-3 py-1.5 text-sm text-white bg-primary-500 rounded-lg hover:bg-primary-600 transition-colors"
+            >
+              搜索
+            </button>
           </div>
-          
-          {searchQuery ? (
-            <div className="space-y-2">
-              <p className="text-xs text-gray-500 font-medium mb-2">高亮搜索结果</p>
-              <button
-                onClick={handleContentClick}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-              >
-                <Highlighter className="w-4 h-4" />
-                <span>高亮显示: "{searchQuery}"</span>
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <p className="text-xs text-gray-500 font-medium mb-2">文档大纲</p>
-              {sections.length > 0 ? (
-                sections.map((section) => (
-                  <button
-                    key={section.id}
-                    onClick={() => scrollToSection(section.id)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors text-left ${
-                      activeSection === section.id
-                        ? 'bg-primary-100 text-primary-700 font-medium'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                    style={{ paddingLeft: `${(section.level - 1) * 12 + 12}px` }}
-                  >
-                    <ChevronRight className={`w-4 h-4 transition-transform flex-shrink-0 ${
-                      activeSection === section.id ? 'rotate-90' : ''
-                    }`} />
-                    <span className="truncate">{section.title}</span>
-                  </button>
-                ))
-              ) : (
-                <p className="text-xs text-gray-400 px-3 py-2">暂无大纲</p>
-              )}
-            </div>
-          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-          {searchQuery ? (
-            <div
-              className="markdown-content"
-              dangerouslySetInnerHTML={{ __html: highlightContent }}
-            />
-          ) : (
-            <div className="markdown-content">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  h1: ({ children, ...props }) => (
-                    <h1 id={typeof children === 'string' ? children.toLowerCase().replace(/[^a-z0-9]+/g, '-') : ''} {...props}>
-                      {children}
-                    </h1>
-                  ),
-                  h2: ({ children, ...props }) => (
-                    <h2 id={typeof children === 'string' ? children.toLowerCase().replace(/[^a-z0-9]+/g, '-') : ''} {...props}>
-                      {children}
-                    </h2>
-                  ),
-                  h3: ({ children, ...props }) => (
-                    <h3 id={typeof children === 'string' ? children.toLowerCase().replace(/[^a-z0-9]+/g, '-') : ''} {...props}>
-                      {children}
-                    </h3>
-                  ),
-                }}
-              >
-                {content}
-              </ReactMarkdown>
+        <div className="flex-1 flex overflow-hidden">
+          <div className="w-48 border-r border-gray-100 bg-gray-50 p-3 overflow-y-auto flex-shrink-0">
+            <p className="text-xs text-gray-500 font-medium mb-2">文档大纲</p>
+            <div className="space-y-1">
+              {Array.from({ length: Math.min(numPages, 20) }, (_, i) => (
+                <button
+                  key={i + 1}
+                  onClick={() => handlePageChange(i + 1)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+                    currentPage === i + 1
+                      ? 'bg-primary-100 text-primary-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <ChevronRight className={`w-4 h-4 transition-transform flex-shrink-0 ${
+                    currentPage === i + 1 ? 'rotate-90' : ''
+                  }`} />
+                  <span>第 {i + 1} 页</span>
+                </button>
+              ))}
             </div>
-          )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto bg-gray-100 p-6">
+            <div className="flex justify-center">
+              <Document
+                file={fileUrl}
+                onLoadSuccess={onDocumentLoadSuccess}
+                className="max-w-full"
+              >
+                <Page
+                  pageNumber={currentPage}
+                  scale={scale}
+                  rotate={rotation}
+                  className="shadow-lg rounded-lg"
+                  renderTextLayer={true}
+                  renderAnnotationLayer={true}
+                />
+              </Document>
+            </div>
+          </div>
         </div>
       </div>
     </div>
