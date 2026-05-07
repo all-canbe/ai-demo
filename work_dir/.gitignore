@@ -1,0 +1,14 @@
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+.env
+.env.local
+.env.*.local
+docker-compose.override.yml
+*.log
+*.db
+node_modules/
+dist/
+build/
+*.egg-info/
